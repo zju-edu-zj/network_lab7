@@ -172,7 +172,13 @@ public:
     {
         return ((struct packet *)send_adr)->type;
     }
-
+    /*
+     * directly get the type of response if the send_adr is the head of a packet
+     */
+    static int getLen(char *send_adr)
+    {
+        return ((struct packet *)send_adr)->length;
+    }
     void setTime(long cur_time)
     {
         assert(type == RequestTime);
@@ -202,8 +208,14 @@ public:
      * actually you can directly operate response_packet if you think string is too tedious
      */
     std::string getString()
-    {
-        return std::string(response_packet->message, length - sizeof(struct packet));
+    {   
+        int len = length - sizeof(struct packet);
+        string curString;
+        curString.reserve(len);
+        for(int i=0;i<len;i++){
+            curString.push_back(response_packet->message[i]);
+        }
+        return curString;
     }
 
     void setList(vector<Client_info> &clients)

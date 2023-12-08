@@ -164,13 +164,13 @@ void *serveForClient(void* num_ptr){
                     char* send_adr;
                     int length = resp.Serialize(&send_adr);
                     send(forwarded_fd, send_adr,length, 0);
-
+                    cout << "success" << endl;
                     //next send back successful message
                     char succ_m[] = "Forwarding succeed!\n";
                     Response resp_back(ResponseBack_Succ);
                     resp_back.setString(succ_m);
                     //char* send_adr;
-                    length = resp.Serialize(&send_adr);
+                    length = resp_back.Serialize(&send_adr);
                     send(clientfd, send_adr,length, 0);
                 }
             }

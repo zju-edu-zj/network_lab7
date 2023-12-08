@@ -124,7 +124,7 @@ void Client::start()
                 res.Deserialize(ipcm.text, BUF_SIZE);
                 for (Client_info i : res.getList())
                 {
-                    printMessage("Id: " + to_string(i.id) + "IP: " + i.ip_port);
+                    printMessage("Id: " + to_string(i.id) + " IP: " + i.ip_port);
                 }
                 status = INFORMED;
             }
@@ -197,6 +197,7 @@ void *threadReceiveFunc(void *client)
     {
         recv(c.sock, buffer, BUF_SIZE, 0);
         int type = Response::getType(buffer);
+        int len = Response::getLen(buffer);
         if (type == ResponseBack_Succ)
         {
             ipcm.type = ResponseBack_Fail + 10;
@@ -206,7 +207,7 @@ void *threadReceiveFunc(void *client)
             ipcm.type = type + 10;
         }
         memcpy(ipcm.text, buffer, BUF_SIZE);
-        msgsnd(c.msgQueue, &ipcm, BUF_SIZE, 0);
+        msgsnd(c.msgQueue, &ipcm, len, 0);
     }
 }
 
