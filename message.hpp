@@ -138,6 +138,14 @@ class Response{
             delete response_packet;
         }
     }
+    /*
+    * directly get the type of response if the send_adr is the head of a packet
+    */
+    int getType(char* send_adr){
+        response_packet = (struct packet*)send_adr;
+        return response_packet->type;
+    }
+    
     void setTime(long cur_time){
         assert(type==RequestTime);
         length = sizeof(struct packet)+ sizeof(long);
