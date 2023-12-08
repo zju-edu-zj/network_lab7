@@ -47,10 +47,12 @@ void Client::start()
                 cin >> server_ip;
                 printGuideInfo("Enter server port:");
                 cin >> server_port;
-                if(server_ip.compare("d")==0){
+                if (server_ip.compare("d") == 0)
+                {
                     server_ip = "127.0.0.1";
                 }
-                if(server_port.compare("d")==0){
+                if (server_port.compare("d") == 0)
+                {
                     server_port = "4234";
                 }
                 server.sin_addr.s_addr = inet_addr(server_ip.c_str());
@@ -58,7 +60,8 @@ void Client::start()
 
                 // TODO: connect fail
                 int error = connect(sock, (struct sockaddr *)&server, sizeof(server));
-                if(error<0){
+                if (error < 0)
+                {
                     throw "connection failed";
                 }
 
@@ -92,7 +95,9 @@ void Client::start()
                 send(sock, packToSend, len, 0);
                 IPCMessage ipcm;
                 msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestTime + 10, 0);
-                printMessage("Time: " + to_string(ipcm.message.getTime()));
+                Response res;
+                res.Deserialize(ipcm.text, BUF_SIZE);
+                printMessage("Time: " + to_string(res.getTime()));
             }
             else if (command == "showServerName" && status != IDLE)
             {
@@ -102,7 +107,9 @@ void Client::start()
                 send(sock, packToSend, len, 0);
                 IPCMessage ipcm;
                 msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestName + 10, 0);
-                printMessage("Server Name:" + ipcm.message.getString());
+                Response res;
+                res.Deserialize(ipcm.text, BUF_SIZE);
+                printMessage("Server Name:" + res.getString());
             }
             else if (command == "showClientList" && status != IDLE)
             {
@@ -113,7 +120,9 @@ void Client::start()
                 IPCMessage ipcm;
                 msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestList + 10, 0);
                 printMessage("Client list:");
-                for (Client_info i : ipcm.message.getList())
+                Response res;
+                res.Deserialize(ipcm.text, BUF_SIZE);
+                for (Client_info i : res.getList())
                 {
                     printMessage("Id: " + to_string(i.id) + "IP: " + i.ip_port);
                 }
@@ -135,7 +144,9 @@ void Client::start()
                 // TODO: 接受返回信号
                 IPCMessage ipcm;
                 msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseBack_Fail + 10, 0);
-                if (ipcm.message.type == ResponseBack_Succ)
+                Response res;
+                res.Deserialize(ipcm.text, BUF_SIZE);
+                if (res.type == ResponseBack_Succ)
                 {
                     printGuideInfo("Message succeed to send.");
                 }
@@ -164,7 +175,9 @@ void Client::start()
             IPCMessage ipcm;
             if (msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseIndicator + 10, IPC_NOWAIT) > 0)
             {
-                printMessage(ipcm.message.getString());
+                Response res;
+                res.Deserialize(ipcm.text, BUF_SIZE);
+                printMessage(res.getString());
             }
         }
         catch (char const *error_message)
@@ -183,15 +196,16 @@ void *threadReceiveFunc(void *client)
     while (1)
     {
         recv(c.sock, buffer, BUF_SIZE, 0);
-        ipcm.message.Deserialize(buffer, BUF_SIZE);
-        if (ipcm.message.type == ResponseBack_Succ)
+        int type = Response::getType(buffer);
+        if (type == ResponseBack_Succ)
         {
             ipcm.type = ResponseBack_Fail + 10;
         }
         else
         {
-            ipcm.type = ipcm.message.type + 10;
+            ipcm.type = type + 10;
         }
+        memcpy(ipcm.text, buffer, BUF_SIZE);
         msgsnd(c.msgQueue, &ipcm, BUF_SIZE, 0);
     }
 }

@@ -34,7 +34,7 @@ enum STATUS
 struct IPCMessage
 {
     long type;
-    Response message;
+    char text[BUF_SIZE];
 };
 
 class Client
