@@ -1,7 +1,7 @@
-all: client server
+all: clean client server
 
 client:
-	g++ client.cpp main.cpp -o client
+	g++ client.cpp -o client
 
 server:
 	g++ server.cpp -o server

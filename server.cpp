@@ -29,7 +29,7 @@ void *serveForClient(void* num);
 
 using namespace std;
 int main(){
-    int server_sockfd = socket(PF_INET,SOCK_STREAM,0);  
+    int server_sockfd = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);  
     if(server_sockfd == -1){
         close(server_sockfd);
         perror("socket error!");
@@ -57,7 +57,8 @@ int main(){
         // accept()函数从处于established状态的连接队列头部取出一个已经完成的连接，
         // 如果这个队列没有已经完成的连接，accept()函数就会阻塞当前线程，直到取出队列中已完成的客户端连接为止。
         int client_sockfd = accept(server_sockfd, (struct sockaddr*)&client_addr, &client_len);
-        short port = client_addr.sin_port;
+        //out << "established" << endl;
+        unsigned port = client_addr.sin_port;
         port = ntohs(port); //conver to host
         string ip = inet_ntoa(client_addr.sin_addr);
         ip.push_back(':');
@@ -68,12 +69,13 @@ int main(){
         pthread_rwlock_unlock(&rwlock);
         thread_data cur_thread(num,ip,client_sockfd); //the client data
 
-        cout << "The connection of client " << num << "which is from" << cur_thread.client_info.ip_port <<  " is dropped";
+        cout << "The connection of client " << num << " which is from " << cur_thread.client_info.ip_port <<  " is established" << endl;
 
         pthread_rwlock_wrlock(&rwlock);
         database.push_back(cur_thread);
         pthread_rwlock_unlock(&rwlock);
-        pthread_create(NULL, NULL, serveForClient, (void*)num);
+        pthread_t pt;
+        pthread_create(&pt, NULL, serveForClient, (void*)num);
     }
 
 }
@@ -106,7 +108,7 @@ void *serveForClient(void* num_ptr){
                 Response resp(RequestTime);
                 resp.setTime(time(NULL));
                 char* send_adr;
-                int length = resp.Serialize(send_adr);
+                int length = resp.Serialize(&send_adr);
                 send(clientfd, send_adr,length, 0);
             }
             break;
@@ -117,7 +119,7 @@ void *serveForClient(void* num_ptr){
 	            gethostname(name, sizeof(name));
                 resp.setString(name);
                 char* send_adr;
-                int length = resp.Serialize(send_adr);
+                int length = resp.Serialize(&send_adr);
                 send(clientfd, send_adr,length, 0);
             }
             break;
@@ -133,7 +135,7 @@ void *serveForClient(void* num_ptr){
                 pthread_rwlock_unlock(&rwlock);
                 resp.setList(clients);
                 char* send_adr;
-                int length = resp.Serialize(send_adr);
+                int length = resp.Serialize(&send_adr);
                 send(clientfd, send_adr,length, 0);
             }
             break;
@@ -144,11 +146,11 @@ void *serveForClient(void* num_ptr){
                 int database_size = database.size();  //read now in case other threads modify it
                 pthread_rwlock_unlock(&rwlock);
                 if(forwarded_num<0 || forwarded_num >= database_size){
-                    char* error_m = "The client doesn't exist\n";
+                    char error_m[] = "The client doesn't exist\n";
                     Response resp(ResponseBack_Fail);
                     resp.setString(error_m);
                     char* send_adr;
-                    int length = resp.Serialize(send_adr);
+                    int length = resp.Serialize(&send_adr);
                     send(clientfd, send_adr,length, 0);
                 }else{  //The client exist
 
@@ -160,15 +162,15 @@ void *serveForClient(void* num_ptr){
                     int forwarded_fd = database[forwarded_num].client_sockfd;
                     pthread_rwlock_unlock(&rwlock);
                     char* send_adr;
-                    int length = resp.Serialize(send_adr);
+                    int length = resp.Serialize(&send_adr);
                     send(forwarded_fd, send_adr,length, 0);
 
                     //next send back successful message
-                    char* succ_m = "Forwarding succeed!\n";
+                    char succ_m[] = "Forwarding succeed!\n";
                     Response resp_back(ResponseBack_Succ);
                     resp_back.setString(succ_m);
                     //char* send_adr;
-                    length = resp.Serialize(send_adr);
+                    length = resp.Serialize(&send_adr);
                     send(clientfd, send_adr,length, 0);
                 }
             }
@@ -185,6 +187,7 @@ void *serveForClient(void* num_ptr){
         send(clientfd, sendbuf, sizeof(sendbuf), 0);
         memset(recvbuf,0,sizeof(recvbuf));
     }
-    cout << "The connection of client " << num << "which is from" << cur_thread.client_info.ip_port <<  " is dropped";
+    cout << "The connection of client " << num << " which is from " << cur_thread.client_info.ip_port <<  " is dropped" << endl;
+    cout << "......................." << endl;
     //cout << "here" << num;
 }

@@ -75,13 +75,15 @@ class Request{
         memcpy(request_packet->message,bytes,message_length);
     }
     ~Request(){
-        delete request_packet;
+        if(request_packet){
+            delete request_packet;
+        }
     }
     /*
     * send_adr will be set to the data address to be transmitted and return the total size
     */
-    int Serialize(char* send_adr){          
-        send_adr = (char*)request_packet;
+    int Serialize(char** send_adr){          
+        *send_adr = (char*)request_packet;
         return length;
     }
     /*
@@ -106,6 +108,11 @@ class Request{
             int rev_len = (maxsize>remain)? remain: maxsize;
             memcpy((char*)request_packet + offset, rev_addr,rev_len);
             offset += rev_len;
+            if(rev_len==maxsize){
+                return false;
+            }else{
+                return true;
+            }
         }
     }
     
@@ -127,7 +134,9 @@ class Response{
         type = _type;
     }
     ~Response(){
-        delete response_packet;
+        if(response_packet){
+            delete response_packet;
+        }
     }
     void setTime(long cur_time){
         assert(type==RequestTime);
@@ -184,8 +193,8 @@ class Response{
     /*
     * send_adr will be set to the data address to be transmitted and return the total size
     */
-    int Serialize(char* send_adr){          
-        send_adr = (char*)response_packet;
+    int Serialize(char** send_adr){          
+        *send_adr = (char*)response_packet;
         return length ;  //for an extra 0
     }
     /*
@@ -197,6 +206,7 @@ class Response{
             response_packet = (struct packet*)rev_addr;
             length = response_packet->length;
             type = response_packet->type;
+            //num = response_packet->type;
             response_packet = (struct packet*) new char[length];
             if(length > maxsize){
                 memcpy(response_packet,rev_addr,maxsize);
@@ -211,6 +221,11 @@ class Response{
             int rev_len = (maxsize>remain)? remain: maxsize;
             memcpy((char*)response_packet + offset, rev_addr,rev_len);
             offset += rev_len;
+            if(rev_len==maxsize){
+                return false;
+            }else{
+                return true;
+            }
         }
     }
     struct packet* response_packet = nullptr;

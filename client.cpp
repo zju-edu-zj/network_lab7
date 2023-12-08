@@ -47,12 +47,20 @@ void Client::start()
                 cin >> server_ip;
                 printGuideInfo("Enter server port:");
                 cin >> server_port;
-
+                if(server_ip.compare("d")==0){
+                    server_ip = "127.0.0.1";
+                }
+                if(server_port.compare("d")==0){
+                    server_port = "4234";
+                }
                 server.sin_addr.s_addr = inet_addr(server_ip.c_str());
                 server.sin_port = htons(atoi(server_port.c_str()));
 
                 // TODO: connect fail
-                connect(sock, (struct sockaddr *)&server, sizeof(server));
+                int error = connect(sock, (struct sockaddr *)&server, sizeof(server));
+                if(error<0){
+                    throw "connection failed";
+                }
 
                 // TODO: pthread_create fail
                 pthread_create(&recvThread, nullptr, threadReceiveFunc, this);
@@ -65,7 +73,7 @@ void Client::start()
             {
                 Request req(RequestClose);
                 char *packToSend = nullptr;
-                int len = req.Serialize(packToSend);
+                int len = req.Serialize(&packToSend);
                 send(sock, packToSend, len, 0);
 
                 pthread_cancel(recvThread);
@@ -80,7 +88,7 @@ void Client::start()
             {
                 Request req(RequestTime);
                 char *packToSend = nullptr;
-                int len = req.Serialize(packToSend);
+                int len = req.Serialize(&packToSend);
                 send(sock, packToSend, len, 0);
                 IPCMessage ipcm;
                 msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestTime + 10, 0);
@@ -90,7 +98,7 @@ void Client::start()
             {
                 Request req(RequestName);
                 char *packToSend = nullptr;
-                int len = req.Serialize(packToSend);
+                int len = req.Serialize(&packToSend);
                 send(sock, packToSend, len, 0);
                 IPCMessage ipcm;
                 msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestName + 10, 0);
@@ -100,7 +108,7 @@ void Client::start()
             {
                 Request req(RequestList);
                 char *packToSend = nullptr;
-                int len = req.Serialize(packToSend);
+                int len = req.Serialize(&packToSend);
                 send(sock, packToSend, len, 0);
                 IPCMessage ipcm;
                 msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestList + 10, 0);
@@ -121,7 +129,7 @@ void Client::start()
                 cin >> mess;
                 Request req(RequestMess, mess.length(), mess.c_str(), id);
                 char *packToSend = nullptr;
-                int len = req.Serialize(packToSend);
+                int len = req.Serialize(&packToSend);
                 send(sock, packToSend, len, 0);
 
                 // TODO: 接受返回信号
@@ -154,7 +162,7 @@ void Client::start()
             }
 
             IPCMessage ipcm;
-            if (msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseIndicator, IPC_NOWAIT) > 0)
+            if (msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseIndicator + 10, IPC_NOWAIT) > 0)
             {
                 printMessage(ipcm.message.getString());
             }
@@ -215,4 +223,10 @@ void printMessage(string info)
 {
     cout << SET_BLUE_COLOR << info << endl
          << RESET_COLOR;
+}
+
+int main(int argc, char **argv)
+{
+    Client client;
+    client.start();
 }
