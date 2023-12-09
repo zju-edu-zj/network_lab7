@@ -6,15 +6,15 @@ Client::Client()
 {
     sock = -1;
     key_t key = ftok("/tmp", 'A');
-    if (key < 0)
-    {
-        throw "ftok error";
-    }
+    // if (key < 0)
+    //     throw "ftok error";
+    // {
+    // }
     msgQueue = msgget(key, 0600 | IPC_CREAT);
-    if (msgQueue < 0)
-    {
-        throw "msgget error";
-    }
+    // if (msgQueue < 0)
+    // {
+    //     throw "msgget error";
+    // }
     status = IDLE;
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -24,11 +24,9 @@ Client::~Client()
 {
     if (sock > 0)
     {
-        int c = close(sock);
-        if (c < 0) {}
+        close(sock);
     }
-    int cancel = msgctl(msgQueue, IPC_RMID, nullptr);
-    if (cancel < 0) {}
+    msgctl(msgQueue, IPC_RMID, nullptr);
 }
 
 void Client::start()
@@ -115,20 +113,26 @@ void Client::start()
                 Request req(RequestTime);
                 char *packToSend = nullptr;
                 int len = req.Serialize(&packToSend);
-                int s = send(sock, packToSend, len, 0);
-                if (s < 0)
+                for (int i = 0; i < 100; i++)
                 {
-                    throw "send error";
+                    int s = send(sock, packToSend, len, 0);
+                    if (s < 0)
+                    {
+                        throw "send error";
+                    }
                 }
-                IPCMessage ipcm;
-                int rcv = msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestTime + 10, 0);
-                if (rcv < 0)
+                for (int i = 0; i < 100; i++)
                 {
-                    throw "msgrcv error";
+                    IPCMessage ipcm;
+                    int rcv = msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestTime + 10, 0);
+                    if (rcv < 0)
+                    {
+                        throw "msgrcv error";
+                    }
+                    Response res;
+                    res.Deserialize(ipcm.text, BUF_SIZE);
+                    printMessage("Count: " + to_string(i) + "Time: " + to_string(res.getTime()));
                 }
-                Response res;
-                res.Deserialize(ipcm.text, BUF_SIZE);
-                printMessage("Time: " + to_string(res.getTime()));
             }
             else if (command == "showServerName" && status != IDLE)
             {
@@ -182,8 +186,8 @@ void Client::start()
                 printGuideInfo("Enter destination client ID:");
                 cin >> id;
                 printGuideInfo("Enter message to sent (end with \\n):");
-                getline(cin,mess); //ignore newline
-                getline(cin,mess);
+                getline(cin, mess); // ignore newline
+                getline(cin, mess);
                 Request req(RequestMess, mess.length(), mess.c_str(), id);
                 char *packToSend = nullptr;
                 int len = req.Serialize(&packToSend);
@@ -287,7 +291,7 @@ void *threadReceiveFunc(void *client)
                 // {
                 //     cout << cur[i];
                 // }
-                //cout << endl;
+                // cout << endl;
                 if (type == ResponseBack_Succ)
                 {
                     ipcm.type = ResponseBack_Fail + 10;
