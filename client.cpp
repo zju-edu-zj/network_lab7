@@ -5,10 +5,16 @@ using namespace std;
 Client::Client()
 {
     sock = -1;
-    // TODO: ftok fail
     key_t key = ftok("/tmp", 'A');
-    // TODO: msgget fail
+    if (key < 0)
+    {
+        throw "ftok error";
+    }
     msgQueue = msgget(key, 0600 | IPC_CREAT);
+    if (msgQueue < 0)
+    {
+        throw "msgget error";
+    }
     status = IDLE;
     memset(&server, 0, sizeof(server));
     server.sin_family = AF_INET;
@@ -16,13 +22,13 @@ Client::Client()
 
 Client::~Client()
 {
-    // TODO: close fail
     if (sock > 0)
     {
-        close(sock);
+        int c = close(sock);
+        if (c < 0) {}
     }
-    // TODO: msgctl fail
-    msgctl(msgQueue, IPC_RMID, nullptr);
+    int cancel = msgctl(msgQueue, IPC_RMID, nullptr);
+    if (cancel < 0) {}
 }
 
 void Client::start()
@@ -37,8 +43,11 @@ void Client::start()
 
             if (command == "connect" && status == IDLE)
             {
-                // TODO: socket fail
                 sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+                if (sock < 0)
+                {
+                    throw "socket error";
+                }
 
                 string server_ip;
                 string server_port;
@@ -58,15 +67,17 @@ void Client::start()
                 server.sin_addr.s_addr = inet_addr(server_ip.c_str());
                 server.sin_port = htons(atoi(server_port.c_str()));
 
-                // TODO: connect fail
-                int error = connect(sock, (struct sockaddr *)&server, sizeof(server));
-                if (error < 0)
+                int c = connect(sock, (struct sockaddr *)&server, sizeof(server));
+                if (c < 0)
                 {
                     throw "connection failed";
                 }
 
-                // TODO: pthread_create fail
-                pthread_create(&recvThread, nullptr, threadReceiveFunc, this);
+                int p = pthread_create(&recvThread, nullptr, threadReceiveFunc, this);
+                if (p != 0)
+                {
+                    throw "pthread_create error";
+                }
 
                 status = CONNECTED;
 
@@ -77,10 +88,22 @@ void Client::start()
                 Request req(RequestClose);
                 char *packToSend = nullptr;
                 int len = req.Serialize(&packToSend);
-                send(sock, packToSend, len, 0);
+                int s = send(sock, packToSend, len, 0);
+                if (s < 0)
+                {
+                    throw "send error";
+                }
 
-                pthread_cancel(recvThread);
-                close(sock);
+                int p = pthread_cancel(recvThread);
+                if (p != 0)
+                {
+                    throw "pthread_cancel error";
+                }
+                int c = close(sock);
+                if (c < 0)
+                {
+                    throw "close sock error";
+                }
 
                 sock = -1;
                 status = IDLE;
@@ -92,9 +115,17 @@ void Client::start()
                 Request req(RequestTime);
                 char *packToSend = nullptr;
                 int len = req.Serialize(&packToSend);
-                send(sock, packToSend, len, 0);
+                int s = send(sock, packToSend, len, 0);
+                if (s < 0)
+                {
+                    throw "send error";
+                }
                 IPCMessage ipcm;
-                msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestTime + 10, 0);
+                int rcv = msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestTime + 10, 0);
+                if (rcv < 0)
+                {
+                    throw "msgrcv error";
+                }
                 Response res;
                 res.Deserialize(ipcm.text, BUF_SIZE);
                 printMessage("Time: " + to_string(res.getTime()));
@@ -104,9 +135,17 @@ void Client::start()
                 Request req(RequestName);
                 char *packToSend = nullptr;
                 int len = req.Serialize(&packToSend);
-                send(sock, packToSend, len, 0);
+                int s = send(sock, packToSend, len, 0);
+                if (s < 0)
+                {
+                    throw "send error";
+                }
                 IPCMessage ipcm;
-                msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestName + 10, 0);
+                int rcv = msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestName + 10, 0);
+                if (rcv < 0)
+                {
+                    throw "msgrcv error";
+                }
                 Response res;
                 res.Deserialize(ipcm.text, BUF_SIZE);
                 printMessage("Server Name:" + res.getString());
@@ -116,9 +155,17 @@ void Client::start()
                 Request req(RequestList);
                 char *packToSend = nullptr;
                 int len = req.Serialize(&packToSend);
-                send(sock, packToSend, len, 0);
+                int s = send(sock, packToSend, len, 0);
+                if (s < 0)
+                {
+                    throw "send error";
+                }
                 IPCMessage ipcm;
-                msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestList + 10, 0);
+                int rcv = msgrcv(msgQueue, &ipcm, BUF_SIZE, RequestList + 10, 0);
+                if (rcv < 0)
+                {
+                    throw "msgrcv error";
+                }
                 printMessage("Client list:");
                 Response res;
                 res.Deserialize(ipcm.text, BUF_SIZE);
@@ -135,17 +182,28 @@ void Client::start()
                 printGuideInfo("Enter destination client ID:");
                 cin >> id;
                 printGuideInfo("Enter message to sent (end with \\n):");
-                cin >> mess;
+                getline(cin,mess); //ignore newline
+                getline(cin,mess);
                 Request req(RequestMess, mess.length(), mess.c_str(), id);
                 char *packToSend = nullptr;
                 int len = req.Serialize(&packToSend);
-                send(sock, packToSend, len, 0);
+                int s = send(sock, packToSend, len, 0);
+                if (s < 0)
+                {
+                    throw "send error";
+                }
 
                 // TODO: 接受返回信号
                 IPCMessage ipcm;
-                msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseBack_Fail + 10, 0);
+                int rcv = msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseBack_Fail + 10, 0);
+                printMessage("type1: " + to_string(ipcm.type - 10));
+                if (rcv < 0)
+                {
+                    throw "msgrcv error";
+                }
                 Response res;
                 res.Deserialize(ipcm.text, BUF_SIZE);
+                printMessage("type2: " + to_string(res.type));
                 if (res.type == ResponseBack_Succ)
                 {
                     printGuideInfo("Message succeed to send.");
@@ -159,31 +217,41 @@ void Client::start()
             {
                 if (status != IDLE)
                 {
-                    pthread_cancel(recvThread);
-                    close(sock);
+                    int p = pthread_cancel(recvThread);
+                    if (p != 0)
+                    {
+                        throw "pthread_cancel error";
+                    }
+                    int c = close(sock);
+                    if (c < 0)
+                    {
+                        throw "close socket error";
+                    }
                     sock = -1;
                     status = IDLE;
                     printGuideInfo("Connection closed.");
                 }
                 break;
             }
+            else if (command == "receive")
+            {
+                IPCMessage ipcm;
+                int rcv = msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseIndicator + 10, IPC_NOWAIT);
+                if (rcv > 0)
+                {
+                    Response res;
+                    res.Deserialize(ipcm.text, BUF_SIZE);
+                    printMessage(res.getString());
+                }
+            }
             else
             {
                 throw("command not exist");
             }
-
-            IPCMessage ipcm;
-            if (msgrcv(msgQueue, &ipcm, BUF_SIZE, ResponseIndicator + 10, IPC_NOWAIT) > 0)
-            {
-                Response res;
-                res.Deserialize(ipcm.text, BUF_SIZE);
-                printMessage(res.getString());
-            }
         }
         catch (char const *error_message)
         {
-            cout << SET_RED_COLOR << error_message << endl
-                 << RESET_COLOR;
+            cout << SET_RED_COLOR << error_message << RESET_COLOR << endl;
         }
     }
 }
@@ -192,30 +260,62 @@ void *threadReceiveFunc(void *client)
 {
     Client c = *((Client *)client);
     char buffer[BUF_SIZE];
-    IPCMessage ipcm;
     while (1)
     {
-        recv(c.sock, buffer, BUF_SIZE, 0);
-        int type = Response::getType(buffer);
-        int len = Response::getLen(buffer);
-        if (type == ResponseBack_Succ)
+        try
         {
-            ipcm.type = ResponseBack_Fail + 10;
+            memset(buffer, 0, BUF_SIZE);
+            int r = recv(c.sock, buffer, BUF_SIZE, 0);
+            if (r < 0)
+            {
+                throw "recv error";
+            }
+            char *cur = buffer;
+            while (1)
+            {
+                IPCMessage ipcm;
+                memset(ipcm.text, 0, BUF_SIZE);
+                unsigned int type = Response::getType(cur);
+                unsigned int len = Response::getLen(cur);
+                // printMessage("type: " + to_string(type));
+                // printMessage("len: " + to_string(len));
+                if (type < RequestTime || type > ResponseIndicator || len < 12)
+                {
+                    break;
+                }
+                // for (int i = 12; i < len; i++)
+                // {
+                //     cout << cur[i];
+                // }
+                //cout << endl;
+                if (type == ResponseBack_Succ)
+                {
+                    ipcm.type = ResponseBack_Fail + 10;
+                }
+                else
+                {
+                    ipcm.type = type + 10;
+                }
+                memcpy(ipcm.text, cur, BUF_SIZE);
+                int m = msgsnd(c.msgQueue, &ipcm, BUF_SIZE, 0);
+                if (m < 0)
+                {
+                    throw "msgsnd error";
+                }
+                cur += len;
+            }
         }
-        else
+        catch (char const *error_message)
         {
-            ipcm.type = type + 10;
+            cout << SET_RED_COLOR << error_message << RESET_COLOR << endl;
         }
-        memcpy(ipcm.text, buffer, BUF_SIZE);
-        msgsnd(c.msgQueue, &ipcm, len, 0);
     }
 }
 
 void printGuideInfo(string info)
 {
     cout << SET_GREEN_COLOR
-         << info << endl
-         << RESET_COLOR;
+         << info << RESET_COLOR << endl;
 }
 
 void printGuideInfo(STATUS status)
@@ -236,8 +336,7 @@ void printGuideInfo(STATUS status)
 
 void printMessage(string info)
 {
-    cout << SET_BLUE_COLOR << info << endl
-         << RESET_COLOR;
+    cout << SET_BLUE_COLOR << info << RESET_COLOR << endl;
 }
 
 int main(int argc, char **argv)

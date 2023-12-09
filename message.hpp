@@ -141,7 +141,6 @@ public:
     struct packet *request_packet = nullptr;
     int length = sizeof(struct packet);
 
-private:
     int offset = 0;
 };
 
@@ -299,6 +298,5 @@ public:
     int length = sizeof(struct packet);
     int type;
 
-private:
     int offset = 0;
 };

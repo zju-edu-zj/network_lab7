@@ -87,7 +87,7 @@ void *serveForClient(void* num_ptr){
     pthread_rwlock_unlock(&rwlock);
     int clientfd = cur_thread.client_sockfd;
     char recvbuf[BufferSize];
-    char sendbuf[BufferSize] = "recv successfully.\n";
+    //char sendbuf[BufferSize] = "recv successfully.\n";
     while(1){
         memset(recvbuf,0,sizeof(recvbuf));  //set to zero to avoid some strange situations
         int stat = recv(clientfd, recvbuf, sizeof(recvbuf), 0);
@@ -100,92 +100,124 @@ void *serveForClient(void* num_ptr){
             pthread_rwlock_unlock(&rwlock);
             break;  //the thread is dropped
         }
-        Request req;
-        req.Deserialize(recvbuf,BufferSize);
-        switch(req.request_packet->type){
-            case RequestTime:
-            {
-                Response resp(RequestTime);
-                resp.setTime(time(NULL));
-                char* send_adr;
-                int length = resp.Serialize(&send_adr);
-                send(clientfd, send_adr,length, 0);
+        char* cur = recvbuf;
+        int offset = 0;
+        while(1){
+            if(offset == stat){
+                break;   //no more data
             }
-            break;
-            case RequestName:
-            {
-                Response resp(RequestName);
-                char name[256];
-	            gethostname(name, sizeof(name));
-                resp.setString(name);
-                char* send_adr;
-                int length = resp.Serialize(&send_adr);
-                send(clientfd, send_adr,length, 0);
-            }
-            break;
-            case RequestList:
-            {
-                Response resp(RequestList);
-                pthread_rwlock_rdlock(&rwlock);
-                vector<Client_info> clients;
-                clients.reserve(database.size()+1);
-                for(auto cthread:database){
-                    clients.push_back(cthread.client_info);
+            Request req;
+            bool complete = req.Deserialize(recvbuf,BufferSize);
+            if(!complete){
+                int remain = req.length - req.offset;
+                char* newbuf = new char[remain];
+                memset(newbuf,0,remain);
+                int _stat = recv(clientfd, newbuf, remain, 0); //we have to make decisions 
+                if(_stat<0){
+                    perror("send error!");
+                    continue;
+                }else if(_stat==0){ //the connection is closed manually by client
+                    pthread_rwlock_wrlock(&rwlock);
+                    database.erase(database.begin()+num);
+                    pthread_rwlock_unlock(&rwlock);
+                    break;  //the thread is dropped
                 }
-                pthread_rwlock_unlock(&rwlock);
-                resp.setList(clients);
-                char* send_adr;
-                int length = resp.Serialize(&send_adr);
-                send(clientfd, send_adr,length, 0);
+                req.Deserialize(newbuf,remain,false);
             }
-            break;
-            case RequestMess:
-            {
-                int forwarded_num = req.request_packet->num;
-                pthread_rwlock_rdlock(&rwlock);
-                int database_size = database.size();  //read now in case other threads modify it
-                pthread_rwlock_unlock(&rwlock);
-                if(forwarded_num<0 || forwarded_num >= database_size){
-                    char error_m[] = "The client doesn't exist\n";
+            offset += req.length;
+            switch(req.request_packet->type){
+                case RequestTime:
+                {
+                    Response resp(RequestTime);
+                    resp.setTime(time(NULL));
+                    char* send_adr;
+                    int length = resp.Serialize(&send_adr);
+                    send(clientfd, send_adr,length, 0);
+                }
+                break;
+                case RequestName:
+                {
+                    Response resp(RequestName);
+                    char name[256];
+	                gethostname(name, sizeof(name));
+                    resp.setString(name);
+                    char* send_adr;
+                    int length = resp.Serialize(&send_adr);
+                    send(clientfd, send_adr,length, 0);
+                }
+                break;
+                case RequestList:
+                {
+                    Response resp(RequestList);
+                    pthread_rwlock_rdlock(&rwlock);
+                    vector<Client_info> clients;
+                    clients.reserve(database.size()+1);
+                    for(auto cthread:database){
+                        clients.push_back(cthread.client_info);
+                    }
+                    pthread_rwlock_unlock(&rwlock);
+                    resp.setList(clients);
+                    char* send_adr;
+                    int length = resp.Serialize(&send_adr);
+                    send(clientfd, send_adr,length, 0);
+                }
+                break;
+                case RequestMess:
+                {
+                    int forwarded_num = req.request_packet->num;
+                    pthread_rwlock_rdlock(&rwlock);
+                    int database_size = database.size();  //read now in case other threads modify it
+                    pthread_rwlock_unlock(&rwlock);
+                    if(forwarded_num<0 || forwarded_num >= database_size){
+                        char error_m[] = "The client doesn't exist\n";
+                        Response resp(ResponseBack_Fail);
+                        resp.setString(error_m);
+                        char* send_adr;
+                        int length = resp.Serialize(&send_adr);
+                        send(clientfd, send_adr,length, 0);
+                    }else{  //The client exist
+
+                        //forward indicator message
+                        Response resp(ResponseIndicator);
+                        resp.setString(req.request_packet->message);
+                        //get the fd of the forwarded client
+                        pthread_rwlock_rdlock(&rwlock);
+                        int forwarded_fd = database[forwarded_num].client_sockfd;
+                        pthread_rwlock_unlock(&rwlock);
+                        char* send_adr;
+                        int length = resp.Serialize(&send_adr);
+                        send(forwarded_fd, send_adr,length, 0);
+                        cout << "success" << endl;
+                        //next send back successful message
+                        char succ_m[] = "Forwarding succeed!\n";
+                        Response resp_back(ResponseBack_Succ);
+                        resp_back.setString(succ_m);
+                        //char* send_adr;
+                        length = resp_back.Serialize(&send_adr);
+                        send(clientfd, send_adr,length, 0);
+                    }
+                }
+                break;
+                default:
+                {
+                    char error_m[] = "Wrong type of packet\n";
                     Response resp(ResponseBack_Fail);
                     resp.setString(error_m);
                     char* send_adr;
                     int length = resp.Serialize(&send_adr);
                     send(clientfd, send_adr,length, 0);
-                }else{  //The client exist
-
-                    //forward indicator message
-                    Response resp(ResponseIndicator);
-                    resp.setString(req.request_packet->message);
-                    //get the fd of the forwarded client
-                    pthread_rwlock_rdlock(&rwlock);
-                    int forwarded_fd = database[forwarded_num].client_sockfd;
-                    pthread_rwlock_unlock(&rwlock);
-                    char* send_adr;
-                    int length = resp.Serialize(&send_adr);
-                    send(forwarded_fd, send_adr,length, 0);
-                    cout << "success" << endl;
-                    //next send back successful message
-                    char succ_m[] = "Forwarding succeed!\n";
-                    Response resp_back(ResponseBack_Succ);
-                    resp_back.setString(succ_m);
-                    //char* send_adr;
-                    length = resp_back.Serialize(&send_adr);
-                    send(clientfd, send_adr,length, 0);
                 }
+                break;
             }
-            break;
-            default:
-            break;
         }
-        fputs(recvbuf,stdout);
-        strcpy(sendbuf, recvbuf);
-        if(strcmp(recvbuf,"exit\n") == 0){
-            send(clientfd, "connection close.\n", sizeof("connection close.\n"), 0);
-            break;
-        }
-        send(clientfd, sendbuf, sizeof(sendbuf), 0);
-        memset(recvbuf,0,sizeof(recvbuf));
+        // fputs(recvbuf,stdout);
+        // strcpy(sendbuf, recvbuf);
+        // if(strcmp(recvbuf,"exit\n") == 0){
+        //     send(clientfd, "connection close.\n", sizeof("connection close.\n"), 0);
+        //     break;
+        // }
+        // send(clientfd, sendbuf, sizeof(sendbuf), 0);
+        // memset(recvbuf,0,sizeof(recvbuf));
     }
     cout << "The connection of client " << num << " which is from " << cur_thread.client_info.ip_port <<  " is dropped" << endl;
     cout << "......................." << endl;
