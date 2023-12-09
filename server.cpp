@@ -107,7 +107,7 @@ void *serveForClient(void* num_ptr){
                 break;   //no more data
             }
             Request req;
-            bool complete = req.Deserialize(recvbuf,BufferSize);
+            bool complete = req.Deserialize(cur+offset,BufferSize-offset);
             if(!complete){
                 int remain = req.length - req.offset;
                 char* newbuf = new char[remain];
